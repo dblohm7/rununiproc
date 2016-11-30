@@ -1,3 +1,9 @@
+/* -*- Mode: C++; tab-width: 8; indent-tabs-mode: nil; c-basic-offset: 2 -*- */
+/* vim: set ts=8 sts=2 et sw=2 tw=80: */
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+
 #include <iostream>
 #include <memory>
 #include <sstream>
@@ -54,6 +60,30 @@ wmain(int argc, wchar_t* argv[])
     std::wcerr << L"At least one argument required." << std::endl;
     return 1;
   }
+
+  DWORD const exePathBufLen = 32767;
+  auto exePathBuf = std::make_unique<wchar_t[]>(exePathBufLen);
+  if (!exePathBuf) {
+    std::wcerr << L"Failed to allocate exePathBuf." << std::endl;
+    return 1;
+  }
+
+  // For now we only support searching for exe files
+  DWORD pathLen = SearchPath(nullptr, argv[1], L".exe", exePathBufLen,
+                             exePathBuf.get(), nullptr);
+  if (!pathLen) {
+    DWORD err = GetLastError();
+    std::wcerr << L"SearchPath failed with error code " << err << std::endl;
+    return 1;
+  }
+  if (pathLen >= exePathBufLen) {
+    std::wcerr << L"SearchPath failed: path too long." << std::endl;
+    return 1;
+  }
+
+#if defined(DEBUG)
+  std::wcout << L"Launching \"" << exePathBuf.get() << L"\"" << std::endl;
+#endif
 
   UniqueHandle job(CreateJobObject(nullptr, nullptr));
   if (!job) {
@@ -125,7 +155,12 @@ wmain(int argc, wchar_t* argv[])
   }
 
   std::wostringstream oss;
-  for (int i = 1; i < argc; ++i) {
+  oss << L"\"" << exePathBuf.get() << L"\"";
+  if (argc > 2) {
+    oss << L" ";
+  }
+
+  for (int i = 2; i < argc; ++i) {
     oss << L"\"" << argv[i] << L"\"";
     if (i != argc - 1) {
       oss << L" ";
@@ -133,6 +168,10 @@ wmain(int argc, wchar_t* argv[])
   }
 
   std::wstring cmdLine(oss.str());
+  if (cmdLine.size() > exePathBufLen) {
+    std::wcerr << L"Command line is too long for CreateProcess" << std::endl;
+    return 1;
+  }
 
   STARTUPINFOEX siex{};
   siex.StartupInfo.cb = sizeof(siex);
@@ -143,11 +182,10 @@ wmain(int argc, wchar_t* argv[])
   siex.lpAttributeList = attrList.get();
 
   PROCESS_INFORMATION pi;
-  if (!CreateProcess(argv[1], const_cast<wchar_t*>(cmdLine.c_str()), nullptr,
-                     nullptr, TRUE,
-                     CREATE_SUSPENDED | CREATE_UNICODE_ENVIRONMENT |
-                     EXTENDED_STARTUPINFO_PRESENT, nullptr,
-                     nullptr, &siex.StartupInfo, &pi)) {
+  if (!CreateProcess(exePathBuf.get(), const_cast<wchar_t*>(cmdLine.c_str()),
+                     nullptr, nullptr, TRUE, CREATE_SUSPENDED |
+                     CREATE_UNICODE_ENVIRONMENT | EXTENDED_STARTUPINFO_PRESENT,
+                     nullptr, nullptr, &siex.StartupInfo, &pi)) {
     DWORD err = GetLastError();
     std::wcerr << L"CreateProcess failed with error code " << err << std::endl;
     return 1;
@@ -189,6 +227,6 @@ wmain(int argc, wchar_t* argv[])
                << std::endl;
   }
 
-  return exitCode;
+  return static_cast<int>(exitCode);
 }
 
