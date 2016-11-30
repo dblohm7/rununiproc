@@ -1,0 +1,2 @@
+.gitignore
+: foreach ../src/*.cpp |> cl -O2 -Zi -EHsc -MD -D_WIN32_WINNT=0x0600 -DUNICODE -D_UNICODE -c %f -Fd%B.pdb -Fo%o |> %B.obj | %B.pdb

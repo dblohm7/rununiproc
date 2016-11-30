@@ -1,0 +1,4 @@
+.gitignore
+WIN32LIBS = kernel32.lib
+
+: ../obj/*.obj | ../obj/*.pdb |> cl -Zi -MD %f $(WIN32LIBS) -Fd%O.pdb -Fe%o -link && mt -manifest ../src/compatibility.manifest -outputresource:%o;#1 |> rununiproc.exe | %O.pdb %O.ilk
